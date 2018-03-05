@@ -9,7 +9,7 @@ import (
 )
 
 const (
-    encoded_path string = "/home/riff/Go/src/TFG/yousteg3/encoded.yuv";
+    encoded_path string = "/home/riff/Escritorio/pruebas-video/new-raw.yuv";
     decoded_path string = "decoded.file";
     width int = 1280;
     high int = 720;
