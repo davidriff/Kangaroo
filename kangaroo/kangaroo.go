@@ -35,6 +35,24 @@ func clear_bit(byte_in *byte, position int) { //sets to 0 the specified bit, cal
     *byte_in = out
 }
 
+func hamming_encode (input_array []byte) []byte {
+
+    var output []byte;
+    var result byte;
+
+    //G := [4][7]byte{{1,1,1,0,0,0,0}, {1,0,0,1,1,0,0}, {0,1,0,1,0,1,0}, {1,1,0,1,0,0,1}};
+    G := [][]byte{{1,1,1,0,0,0,0}, {1,0,0,1,1,0,0}, {0,1,0,1,0,1,0}, {1,1,0,1,0,0,1}};
+
+    for i:=0; i<7; i++{
+        result=0;
+        for j:=0; j<4; j++{
+            result=result^input_array[j]&G[j][i];
+        }
+        output=append(output, result);
+    }
+    return output
+}
+
 func read_frame(file_path string, offset int64, clear_option byte, frame_size int) ([]byte, bool) {
 
     var new_position int64;
@@ -145,6 +163,9 @@ func main() {
     var frame_data [] byte;
 
     var secret_file_bits []byte;
+    var secret_file_bits_hamming []byte;
+    var number_of_bits_hamming [] byte;
+    var hamming_block []byte;
     var payload_bits []byte;
     var bit_array []byte;//28 800 bits for this case
 
@@ -163,16 +184,33 @@ func main() {
 
     secret_file_bits=get_bits(secret_file);
 
-    //count how many bits we are going to send and append
-    number_of_bits := make([]byte, 8)
-    binary.BigEndian.PutUint64(number_of_bits, uint64(len(secret_file_bits)+64))
-    fmt.Println(number_of_bits)
 
-    //append size and secret
+    //add hamming to secret bits
+    for i:=0; i<len(secret_file_bits); i+=4{
+        hamming_block=hamming_encode(secret_file_bits[i:i+4]);
+        secret_file_bits_hamming=append(secret_file_bits_hamming, hamming_block...);
+    }
+
+    fmt.Printf("\ntamanio total: %d",len(secret_file_bits_hamming)+64+16*3)
+
+    //count how many bits we are going to encode in the video
+    number_of_bits := make([]byte, 8)
+    binary.BigEndian.PutUint64(number_of_bits, uint64(len(secret_file_bits_hamming)+64+16*3))//64 bits for size header + 16*3 bits for size header hamming
+
+    //add hamming to size header
     number_of_bits=get_bits(number_of_bits)
 
-    payload_bits=append(payload_bits, number_of_bits...)
-    payload_bits=append(payload_bits, secret_file_bits...)
+    for i:=0; i<len(number_of_bits); i+=4{
+        hamming_block=hamming_encode(number_of_bits[i:i+4]);
+        number_of_bits_hamming=append(number_of_bits_hamming, hamming_block...);//+3 or +4?
+    }
+
+    //append size and secret
+    payload_bits=append(payload_bits, number_of_bits_hamming...)
+    payload_bits=append(payload_bits, secret_file_bits_hamming...)
+
+
+
 
     for end_of_video!=true{
 
@@ -209,6 +247,6 @@ func main() {
 
         }
         frame_count=frame_count+1
-        fmt.Printf("Frame: %d \n", frame_count)
+        //fmt.Printf("Frame: %d \n", frame_count)
     }
 }
