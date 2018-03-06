@@ -191,7 +191,7 @@ func main() {
         secret_file_bits_hamming=append(secret_file_bits_hamming, hamming_block...);
     }
 
-    fmt.Printf("\ntamanio total: %d",len(secret_file_bits_hamming)+64+16*3)
+    fmt.Printf("\nTotal size: %d",len(secret_file_bits_hamming)+64+16*3)
 
     //count how many bits we are going to encode in the video
     number_of_bits := make([]byte, 8)
@@ -244,9 +244,7 @@ func main() {
 
                 output_file.Close();
             }
-
         }
         frame_count=frame_count+1
-        //fmt.Printf("Frame: %d \n", frame_count)
     }
 }

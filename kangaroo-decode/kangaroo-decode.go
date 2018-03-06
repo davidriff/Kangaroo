@@ -9,7 +9,7 @@ import (
 )
 
 const (
-    encoded_path string = "/home/riff/Escritorio/pruebas-video/encoded.yuv420";
+    encoded_path string = "/home/riff/Escritorio/pruebas-video/new-raw.yuv";
     decoded_path string = "decoded.file";
     width int = 1280;
     high int = 720;
@@ -103,7 +103,7 @@ func hamming_decode (input_array []byte) []byte {
 
         error_position = syndrome[0]*byte(1)+syndrome[1]*byte(2)+syndrome[2]*byte(4)
 
-        if input_array[error_position]==0{//emulates NOT logical operator for byte type
+        if input_array[error_position-1]==0{//emulates NOT logical operator for byte type
             input_array[error_position-1]=1
         }else{
             input_array[error_position-1]=0

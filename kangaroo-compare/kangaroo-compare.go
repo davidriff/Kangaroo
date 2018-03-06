@@ -45,11 +45,8 @@ func main(){
     		if new_file[a]!=original_file[a]{
     			differences=differences+1
     		}
-
     	}
-
     	fmt.Printf("This files have %d differences in a total of %d bytes. It is a %f/100", differences,len(original_file), float32(differences)*100/float32(len(original_file)))
-
     }else{
     	fmt.Printf("This files do not have the same size! Original: %d New: %d", len(original_file), len(new_file))
     }
