@@ -9,7 +9,7 @@ import (
 )
 
 const (
-    encoded_path string = "/home/riff/Escritorio/pruebas-video/new-raw.yuv";
+    encoded_path string = "/home/riff/Escritorio/pruebas-video/encoded.yuv420";
     decoded_path string = "decoded.file";
     width int = 1280;
     high int = 720;
@@ -80,10 +80,52 @@ func bits_to_byte(bit_array [8]byte, order int) byte{// order specifies if the b
     return byte_out
 }
 
+func hamming_decode (input_array []byte) []byte {
+
+    var syndrome [3]byte;
+    var error_position byte;
+    var result byte;
+    var output []byte;
+
+    H:=[][]byte{{1,0,0}, {0,1,0}, {1,1,0}, {0,0,1}, {1,0,1}, {0,1,1},{1,1,1}}
+
+    R:=[][]byte{{0,0,0,0}, {0,0,0,0}, {1,0,0,0}, {0,0,0,0}, {0,1,0,0}, {0,0,1,0}, {0,0,0,1}}
+
+    for i:=0; i<3; i++{
+        result=0;
+        for j:=0; j<7; j++{
+            result = result^input_array[j]&H[j][i]
+        }
+        syndrome[i]=result
+    }
+
+    if syndrome[0]!=0 || syndrome[1]!=0 || syndrome[2]!=0{
+
+        error_position = syndrome[0]*byte(1)+syndrome[1]*byte(2)+syndrome[2]*byte(4)
+
+        if input_array[error_position]==0{//emulates NOT logical operator for byte type
+            input_array[error_position-1]=1
+        }else{
+            input_array[error_position-1]=0
+        }
+        fmt.Printf("Error detected at position: %d\n", error_position)
+    }
+
+    for i:=0; i<4; i++{
+        result=0
+        for j:=0;j<7; j++{
+            result=result^input_array[j]&R[j][i]
+        }
+        output=append(output, result)
+    }
+    return output
+}
+
 func extract_bits(number_of_bits_to_read uint64) []byte{//reads frames and extracts secret bits until the number is reached
 
     var frame_data []byte;
     var output_data []byte;
+    var output_data_decoded []byte;
     var sum int = 0;
     var mean float64;
     var actual_byte byte;
@@ -98,17 +140,14 @@ func extract_bits(number_of_bits_to_read uint64) []byte{//reads frames and extra
     var try_23 float64;
     var try_8 float64;
 
-
     for extracted_bits!=number_of_bits_to_read{
 
         end_of_frame=false;
         frame_position= y_size;
-        //fmt.Printf("Reading frame... %d\n", frame_count);
         frame_data, _=read_frame(encoded_path, int64(frame_count)*int64(frame_size));//load frame
         
 
         for end_of_frame!=true{
-
 
             for line_position:=0; line_position<width; line_position+=width/4{
                 for line_block:=0; line_block<4; line_block++{
@@ -141,24 +180,25 @@ func extract_bits(number_of_bits_to_read uint64) []byte{//reads frames and extra
                 
             }else{
                 output_data=append(output_data, 0);
-                
             }
 
             extracted_bits=extracted_bits+1;
-            //fmt.Println(extracted_bits);
 
             if frame_position==frame_size{//end of frame, go to next frame
                 end_of_frame=true;
                 frame_count=frame_count+1;
-                //fmt.Println("\nEnd of frame !");
             }
             if extracted_bits==number_of_bits_to_read{//we read all we needed
-                fmt.Println("I have everything i need !");
                 break;
             }
         }
     }
-    return output_data
+
+    for i:=0; i<len(output_data); i+=7{
+        output_data_decoded=append(output_data_decoded, hamming_decode(output_data[i:i+7])...)
+    }
+
+    return output_data_decoded
 }
 
 func get_secret_size() uint64{
@@ -170,7 +210,7 @@ func get_secret_size() uint64{
 
     var secret_size_in_bytes  []byte;
 
-    secret_size_in_bits = extract_bits(64);
+    secret_size_in_bits = extract_bits(64+16*3);//64+16*3 for the hamming bits of size header
 
     //reverse each bit inside each byte
     for b:=0; b<8; b++{
@@ -199,6 +239,7 @@ func get_secret_size() uint64{
     //turn to uint64
     secret_size=binary.BigEndian.Uint64(secret_size_in_bytes);
 
+    fmt.Printf("\n%d bits to read", secret_size)
     return secret_size
 }
 
@@ -210,10 +251,8 @@ func main() {
 
     var secret_size uint64=get_secret_size();
 
-    fmt.Println(secret_size);
-
     //read the secret
-    fmt.Println("Reading...");
+    fmt.Println("\n\nReading...");
     secret_in_bits=extract_bits(secret_size);
     fmt.Printf("\n%d bits recovered", len(secret_in_bits));
 
