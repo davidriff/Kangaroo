@@ -40,7 +40,6 @@ func hamming_encode (input_array []byte) []byte {
     var output []byte;
     var result byte;
 
-    //G := [4][7]byte{{1,1,1,0,0,0,0}, {1,0,0,1,1,0,0}, {0,1,0,1,0,1,0}, {1,1,0,1,0,0,1}};
     G := [][]byte{{1,1,1,0,0,0,0}, {1,0,0,1,1,0,0}, {0,1,0,1,0,1,0}, {1,1,0,1,0,0,1}};
 
     for i:=0; i<7; i++{
@@ -78,11 +77,10 @@ func read_frame(file_path string, offset int64, clear_option byte, frame_size in
 
     _, err = binary_file.Read(read_bytes)
     check(err)
-    //fmt.Printf("%d bytes: ", n1)
 
     if clear_option==1{
         for i:=0; i<len(read_bytes); i++{
-            clear_bit(&read_bytes[i], 1)//poner a 0 los valores descartables
+            clear_bit(&read_bytes[i], 1)
             clear_bit(&read_bytes[i], 2)
             clear_bit(&read_bytes[i], 3)
             clear_bit(&read_bytes[i], 4)
@@ -94,12 +92,12 @@ func read_frame(file_path string, offset int64, clear_option byte, frame_size in
     return read_bytes, end_of_file
 }
 
-func level_1(frame_data []byte, secret_file_bits []byte, y_size int, width int){//changes the LSB of every U and V
+func level_1(frame_data []byte, secret_file_bits []byte, y_size int, width int, output_path string){//changes the LSB of every U and V
 
     var frame_position int = y_size;//start after Y
     var in_line_position int = 0;
 
-    output_file, err := os.OpenFile("encoded.yuv420", os.O_APPEND|os.O_WRONLY, 0600);
+    output_file, err := os.OpenFile(output_path, os.O_APPEND|os.O_WRONLY, 0600);
     check(err);
     defer output_file.Close();
 
@@ -110,7 +108,6 @@ func level_1(frame_data []byte, secret_file_bits []byte, y_size int, width int){
             for line_position:=0; line_position<width; line_position+=width/4{
                 for line_block:=0; line_block<4; line_block++{
                     frame_data[frame_position+line_block+line_position+in_line_position]=frame_data[frame_position+line_block+line_position+in_line_position]+0x08;
-                    //fmt.Printf("Writing: 0 in position: %d \n", frame_position+line_block+line_position+in_line_position)
                 }
             }
         }
@@ -120,7 +117,6 @@ func level_1(frame_data []byte, secret_file_bits []byte, y_size int, width int){
             for line_position:=0; line_position<width; line_position+=width/4{
                 for line_block:=0; line_block<4; line_block++{
                     frame_data[frame_position+line_block+line_position+in_line_position]=frame_data[frame_position+line_block+line_position+in_line_position]+0x17;
-                    //fmt.Printf("Writing: 1 in position: %d \n", frame_position+line_block+line_position+in_line_position)
                 }
             }
         }
@@ -138,19 +134,21 @@ func level_1(frame_data []byte, secret_file_bits []byte, y_size int, width int){
 
 func main() {
 
-    secret_file_path_ptr := flag.String("sp", "", "Absolute path to the file we want to hide.");
-    video_path_ptr := flag.String("vp", "", "Absolute path to the raw video that will contain the secret file.");
-    width_ptr := flag.Int("width", 0, "Video width");
-    high_ptr := flag.Int("high", 0, "Video high");
+    secret_file_path_ptr := flag.String("i", "", "Absolute path to the file we want to hide.");
+    video_path_ptr := flag.String("v", "", "Absolute path to the raw video that will contain the secret file.");
+    output_path_ptr := flag.String("o", "encoded.yuv420", "Path and name for output file");
+    width_ptr := flag.Int("w", 0, "Video width");
+    high_ptr := flag.Int("h", 0, "Video high");
     flag.Parse()
 
     if *secret_file_path_ptr=="" || *video_path_ptr=="" || *width_ptr==0 || *high_ptr==0 {
-        flag.PrintDefaults()
-        os.Exit(1)
+        flag.PrintDefaults();
+        os.Exit(1);
     }
 
     var secret_file_path string = *secret_file_path_ptr;
     var video_path string = *video_path_ptr;
+    var output_path string = *output_path_ptr;
     var width int = *width_ptr;
     var high int = *high_ptr;
 
@@ -176,7 +174,7 @@ func main() {
     var secret_count int = 0;
 
     empty:=[]byte("")
-    err := ioutil.WriteFile("encoded.yuv420", empty, 0644)
+    err := ioutil.WriteFile(output_path, empty, 0644)
     check(err)
 
     secret_file, err := ioutil.ReadFile(secret_file_path);
@@ -227,7 +225,7 @@ func main() {
                 end_of_secret=true
             }
 
-            level_1(frame_data, bit_array, y_size, width)
+            level_1(frame_data, bit_array, y_size, width, output_path)
 
             secret_count=secret_count+secret_bits_per_frame
 
@@ -235,7 +233,7 @@ func main() {
             frame_data, end_of_video=read_frame(video_path, int64(frame_count)*int64(frame_size), 0, frame_size);//read new frame
 
             if end_of_video!=true{
-                output_file, err := os.OpenFile("encoded.yuv420", os.O_APPEND|os.O_WRONLY, 0600);
+                output_file, err := os.OpenFile(output_path, os.O_APPEND|os.O_WRONLY, 0600);
                 check(err);
                 defer output_file.Close();
 
