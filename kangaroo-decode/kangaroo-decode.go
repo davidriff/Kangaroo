@@ -6,17 +6,7 @@ import (
     "math"
     "encoding/binary"
     "io/ioutil"
-)
-
-const (
-    encoded_path string = "/home/riff/Escritorio/pruebas-video/new-raw.yuv";
-    decoded_path string = "decoded.file";
-    width int = 1280;
-    high int = 720;
-    y_size int = width*high; 
-    u_size int = width*high*2/8; //in yuv420 u_size = y_size*2/8 bytes
-    v_size int = u_size;
-    frame_size int = y_size + u_size + v_size;
+    "flag"
 )
 
 func check(err error) {
@@ -26,7 +16,7 @@ func check(err error) {
     }
 }
 
-func read_frame(file_path string, offset int64) ([]byte, bool) {
+func read_frame(file_path string, offset int64, frame_size int) ([]byte, bool) {
 
     var new_position int64;
     var last_position int64;
@@ -121,7 +111,7 @@ func hamming_decode (input_array []byte) []byte {
     return output
 }
 
-func extract_bits(number_of_bits_to_read uint64) []byte{//reads frames and extracts secret bits until the number is reached
+func extract_bits(number_of_bits_to_read uint64, encoded_path string, frame_size int, y_size int, width int) []byte{//reads frames and extracts secret bits until the number is reached
 
     var frame_data []byte;
     var output_data []byte;
@@ -144,7 +134,7 @@ func extract_bits(number_of_bits_to_read uint64) []byte{//reads frames and extra
 
         end_of_frame=false;
         frame_position= y_size;
-        frame_data, _=read_frame(encoded_path, int64(frame_count)*int64(frame_size));//load frame
+        frame_data, _=read_frame(encoded_path, int64(frame_count)*int64(frame_size), frame_size);//load frame
         
 
         for end_of_frame!=true{
@@ -201,7 +191,7 @@ func extract_bits(number_of_bits_to_read uint64) []byte{//reads frames and extra
     return output_data_decoded
 }
 
-func get_secret_size() uint64{
+func get_secret_size(encoded_path string, frame_size int, y_size int, width int) uint64{
 
     var secret_size uint64;
     var secret_size_in_bits []byte;
@@ -210,7 +200,7 @@ func get_secret_size() uint64{
 
     var secret_size_in_bytes  []byte;
 
-    secret_size_in_bits = extract_bits(64+16*3);//64+16*3 for the hamming bits of size header
+    secret_size_in_bits = extract_bits(64+16*3, encoded_path, frame_size, y_size, width);//64+16*3 for the hamming bits of size header
 
     //reverse each bit inside each byte
     for b:=0; b<8; b++{
@@ -245,15 +235,37 @@ func get_secret_size() uint64{
 
 func main() {
 
+    encoded_file_path_ptr := flag.String("i", "", "Path to encoded file");
+    output_path_ptr := flag.String("o", "decoded.file", "Path for output file");
+    width_ptr := flag.Int("w", 0, "Video width");
+    high_ptr := flag.Int("h", 0, "Video high");
+    flag.Parse()
+
+    if *encoded_file_path_ptr=="" || *width_ptr==0 || *high_ptr==0 {
+        flag.PrintDefaults();
+        os.Exit(1);
+    }
+
+    //constants of this video
+    var encoded_path string = *encoded_file_path_ptr;
+    var decoded_path string = *output_path_ptr;
+    var width int = *width_ptr;
+    var high int = *high_ptr;
+    var y_size int = width*high; 
+    var u_size int = width*high*2/8; //in yuv420 u_size = y_size*2/8 bytes
+    var v_size int = u_size;
+    var frame_size int = y_size + u_size + v_size;
+    //
+
     var secret_in_bits []byte;
     var secret_bit_array [8]byte;
     var secret_in_bytes []byte;
 
-    var secret_size uint64=get_secret_size();
+    var secret_size uint64=get_secret_size(encoded_path, frame_size, y_size, width);
 
     //read the secret
     fmt.Println("\n\nReading...");
-    secret_in_bits=extract_bits(secret_size);
+    secret_in_bits=extract_bits(secret_size, encoded_path, frame_size, y_size, width);
     fmt.Printf("\n%d bits recovered", len(secret_in_bits));
 
     for i:=64; i<len(secret_in_bits); i+=8{//turn bits to bytes(skip the first 64 bits which are used for secret size)
