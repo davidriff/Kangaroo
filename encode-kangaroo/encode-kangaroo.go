@@ -92,9 +92,9 @@ func read_frame(file_path string, offset int64, clear_option byte, frame_size in
     return read_bytes, end_of_file
 }
 
-func level_1(frame_data []byte, secret_file_bits []byte, y_size int, width int, output_path string){//changes the LSB of every U and V
+func embed(frame_data []byte, secret_file_bits []byte, start_position int, width int, output_path string){//changes the LSB of every U and V
 
-    var frame_position int = y_size;//start after Y
+    var frame_position int = start_position;//start at Y, U or V
     var in_line_position int = 0;
 
     output_file, err := os.OpenFile(output_path, os.O_APPEND|os.O_WRONLY, 0600);
@@ -139,6 +139,8 @@ func main() {
     output_path_ptr := flag.String("o", "encoded.yuv420", "Path and name for output file");
     width_ptr := flag.Int("w", 0, "Video width");
     high_ptr := flag.Int("h", 0, "Video high");
+    yuv_option_ptr := flag.Int("lc", 3, "Use Luminance Y (0), blue chroma Cb (1), red chroma Cr (2), both chromas (3) or all YCbCr (4)")
+    //bits_to_use_ptr := flag.Int("b", 4, "How many bits to use in each byte")
     flag.Parse();
 
     if *secret_file_path_ptr=="" || *video_path_ptr=="" || *width_ptr==0 || *high_ptr==0 {
@@ -151,12 +153,18 @@ func main() {
     var output_path string = *output_path_ptr;
     var width int = *width_ptr;
     var high int = *high_ptr;
+    var yuv_option int = *yuv_option_ptr;
+    //var bits_to_use int = *bits_to_use_ptr;
 
     var y_size int = width*high; 
     var u_size int = width*high*2/8; //in yuv420 u_size = y_size*2/8 bytes
     var v_size int = u_size;
     var frame_size int = y_size + u_size + v_size;
-    var secret_bits_per_frame int = u_size*2/16;//28800
+
+    yuv_options_size_array := []int{y_size/16, u_size/16, v_size/16, 2*u_size/16, frame_size/16}//indicates how many bits we can embed in each frame depending on yuv_option ex-> for yuv_option 3: u_size*2/16=28800
+    yuv_options_start_position_array := []int{0, u_size, v_size, y_size, 0}//indicates start position for writing (embeding secret) in frame, dependending on yuv options
+    var secret_bits_per_frame int = yuv_options_size_array[yuv_option];
+    var start_position int = yuv_options_start_position_array[yuv_option];
 
     var frame_data [] byte;
 
@@ -165,7 +173,7 @@ func main() {
     var number_of_bits_hamming [] byte;
     var hamming_block []byte;
     var payload_bits []byte;
-    var bit_array []byte;//28 800 bits for this case
+    var bit_array []byte;
 
     var end_of_video bool = false;
     var end_of_secret bool = false;
@@ -212,7 +220,7 @@ func main() {
 
     for end_of_video!=true{
 
-        if end_of_secret!=true{//define frame data and secret data, and give it to level_1 frame by frame
+        if end_of_secret!=true{//define frame data and secret data, and give it to embed() frame by frame
 
             frame_data, end_of_video=read_frame(video_path, int64(frame_count)*int64(frame_size), 1, frame_size);//read new frame
 
@@ -221,11 +229,11 @@ func main() {
                 bit_array=payload_bits[secret_count:secret_count+secret_bits_per_frame];//read the data to hide
 
             }else{
-                bit_array=payload_bits[secret_count:];//maybe this does not work
+                bit_array=payload_bits[secret_count:];
                 end_of_secret=true;
             }
 
-            level_1(frame_data, bit_array, y_size, width, output_path);
+            embed(frame_data, bit_array, start_position, width, output_path);
 
             secret_count=secret_count+secret_bits_per_frame;
 
