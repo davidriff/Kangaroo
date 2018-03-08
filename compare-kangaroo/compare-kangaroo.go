@@ -14,15 +14,15 @@ func check(err error) {
 }
 
 
-func read_byte(file *os.File, offset int64) []byte{
-    read_byte := make([]byte, 200000000)
+func read_bytes(file *os.File, offset int64) []byte{
+    read_bytes := make([]byte, 1)
 
     _, err := file.Seek(offset, 0)
     check(err)
 
-    _, err = file.Read(read_byte)
+    _, err = file.Read(read_bytes)
     check(err)
-    return read_byte
+    return read_bytes
 }
 
 func get_bits(bytes_in []byte) []byte { //returns the bits in a byte
@@ -61,47 +61,51 @@ func main(){
     var bits2 []byte;
 
     var differences [8]int64;
+    var similarities [8]int64;
 
     var total_differences int64;
 
     //Open file 1 and get info
-    file1, err := os.Open(file1_path)
-    check(err)
-    defer file1.Close()
-    info1, err := file1.Stat()
-    check(err)
-
+    file1, err := os.Open(file1_path);
+    check(err);
+    defer file1.Close();
+    info1, err := file1.Stat();
+    check(err);
 
     //Open file 2 and get info
-    file2, err := os.Open(file2_path)
-    check(err)
-    defer file2.Close()
-    info2, err := file2.Stat()
-    check(err)
+    file2, err := os.Open(file2_path);
+    check(err);
+    defer file2.Close();
+    info2, err := file2.Stat();
+    check(err);
 
     if info1.Size()==info2.Size(){
-        var position int64=0;
+        var byte_position int64=0;
         
-        for position+200000000<info1.Size(){
-            bytes1=read_bytes(file1, position)
-            bytes2=read_bytes(file2, position)
+        //read files and compare bit by bit
+        for byte_position<info1.Size(){
+            bytes1=read_bytes(file1, byte_position);
+            bytes2=read_bytes(file2, byte_position);
 
             bits1=get_bits(bytes1)
             bits2=get_bits(bytes2)
 
-            for i:=0; i<len(bits1); i++{
-                if bits1[i]!=bits2[i]{
-                    differences[i]=differences[i]+1
+            for b:=0; b<8; b++{
+
+                if bits1[b]!=bits2[b]{
+                    differences[b]=differences[b]+1
+                }else{
+                    similarities[b]=similarities[b]+1
                 }
             }
-
-            position=position+200000000
-            fmt.Println(position)
-        }
-
-        for i:=0; i<8; i++{
-            total_differences=total_differences+differences[i]
-            fmt.Printf("\nBit %d: %d diferrences", differences[i])
+            
+            //show results
+            fmt.Println("\n")
+            for i:=0; i<8; i++{
+                total_differences=total_differences+differences[i]
+                fmt.Printf("\nBit %d: %d differences, %d total, %E/100 error", i, differences[i], similarities[i]+differences[i], float32(differences[i]*100)/float32((similarities[i]+differences[i])))
+            }
+            byte_position=byte_position+1;
         }
 
         fmt.Printf("Total differences: %d ---> %d/100", total_differences, total_differences/info1.Size())
