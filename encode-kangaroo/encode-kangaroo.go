@@ -139,7 +139,7 @@ func main() {
     output_path_ptr := flag.String("o", "encoded.yuv420", "Path and name for output file");
     width_ptr := flag.Int("w", 0, "Video width");
     high_ptr := flag.Int("h", 0, "Video high");
-    yuv_option_ptr := flag.Int("lc", 3, "Use Luminance Y (0), blue chroma Cb (1), red chroma Cr (2), both chromas (3) or all YCbCr (4)")
+    yuv_option_ptr := flag.Int("yuv", 3, "Use Luminance Y (0), blue chroma Cb (1), red chroma Cr (2), both chromas (3) or all YCbCr (4)")
     //bits_to_use_ptr := flag.Int("b", 4, "How many bits to use in each byte")
     flag.Parse();
 
@@ -161,8 +161,9 @@ func main() {
     var v_size int = u_size;
     var frame_size int = y_size + u_size + v_size;
 
+    //every secret bit is encoded in a 4*4 byte bloc (16 bytes)
     yuv_options_size_array := []int{y_size/16, u_size/16, v_size/16, 2*u_size/16, frame_size/16}//indicates how many bits we can embed in each frame depending on yuv_option ex-> for yuv_option 3: u_size*2/16=28800
-    yuv_options_start_position_array := []int{0, u_size, v_size, y_size, 0}//indicates start position for writing (embeding secret) in frame, dependending on yuv options
+    yuv_options_start_position_array := []int{0, y_size, y_size+u_size, y_size, 0}//indicates start position for writing (embeding secret) in frame, dependending on yuv options
     var secret_bits_per_frame int = yuv_options_size_array[yuv_option];
     var start_position int = yuv_options_start_position_array[yuv_option];
 

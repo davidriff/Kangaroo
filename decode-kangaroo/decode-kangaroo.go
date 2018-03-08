@@ -98,7 +98,7 @@ func hamming_decode (input_array []byte) []byte {
         }else{
             input_array[error_position-1]=0
         }
-        fmt.Printf("Error detected at position: %d\n", error_position)
+        //fmt.Printf("Error detected at position: %d\n", error_position)
     }
 
     for i:=0; i<4; i++{
@@ -126,6 +126,7 @@ func extract_bits(number_of_bits_to_read uint64, encoded_path string, frame_size
     var frame_position int;//start after Y
     var in_line_position int = 0;
     var extracted_bits uint64 = 0;
+    var extracted_bits_in_frame int = 0;
 
     var try_23 float64;
     var try_8 float64;
@@ -134,10 +135,11 @@ func extract_bits(number_of_bits_to_read uint64, encoded_path string, frame_size
 
         end_of_frame=false;
         frame_position= start_position;
+        extracted_bits_in_frame = 0;
 
         frame_data, _=read_frame(encoded_path, int64(frame_count)*int64(frame_size), frame_size);//load frame
 
-        for end_of_frame!=true || frame_position+in_line_position<secret_bits_per_frame{
+        for end_of_frame!=true{
 
             for line_position:=0; line_position<width; line_position+=width/4{
                 for line_block:=0; line_block<4; line_block++{
@@ -173,6 +175,12 @@ func extract_bits(number_of_bits_to_read uint64, encoded_path string, frame_size
             }
 
             extracted_bits=extracted_bits+1;
+            extracted_bits_in_frame=extracted_bits_in_frame+1
+
+            if extracted_bits_in_frame==secret_bits_per_frame{
+                end_of_frame=true;
+                frame_count=frame_count+1;
+            }
 
             if frame_position==frame_size{//end of frame, go to next frame
                 end_of_frame=true;
@@ -259,7 +267,7 @@ func main() {
     var frame_size int = y_size + u_size + v_size;
 
     yuv_options_size_array := []int{y_size/16, u_size/16, v_size/16, 2*u_size/16, frame_size/16}//indicates how many bits we are embeded in each frame depending on yuv_option ex-> for yuv_option 3: u_size*2/16=28800
-    yuv_options_start_position_array := []int{0, u_size, v_size, y_size, 0}//indicates start position for reading (recover secret) in frame, dependending on yuv options
+    yuv_options_start_position_array := []int{0, y_size, y_size+u_size, y_size, 0}//indicates start position for reading (recover secret) in frame, dependending on yuv options
     var secret_bits_per_frame int = yuv_options_size_array[yuv_option];
     var start_position int = yuv_options_start_position_array[yuv_option];
     //
