@@ -239,7 +239,7 @@ func main() {
     output_path_ptr := flag.String("o", "decoded.file", "Path for output file");
     width_ptr := flag.Int("w", 0, "Video width");
     high_ptr := flag.Int("h", 0, "Video high");
-    flag.Parse()
+    flag.Parse();
 
     if *encoded_file_path_ptr=="" || *width_ptr==0 || *high_ptr==0 {
         flag.PrintDefaults();

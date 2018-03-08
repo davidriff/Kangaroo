@@ -139,7 +139,7 @@ func main() {
     output_path_ptr := flag.String("o", "encoded.yuv420", "Path and name for output file");
     width_ptr := flag.Int("w", 0, "Video width");
     high_ptr := flag.Int("h", 0, "Video high");
-    flag.Parse()
+    flag.Parse();
 
     if *secret_file_path_ptr=="" || *video_path_ptr=="" || *width_ptr==0 || *high_ptr==0 {
         flag.PrintDefaults();
@@ -173,9 +173,9 @@ func main() {
     var frame_count int = 0;
     var secret_count int = 0;
 
-    empty:=[]byte("")
-    err := ioutil.WriteFile(output_path, empty, 0644)
-    check(err)
+    empty:=[]byte("");
+    err := ioutil.WriteFile(output_path, empty, 0644);
+    check(err);
 
     secret_file, err := ioutil.ReadFile(secret_file_path);
     check(err);
@@ -189,14 +189,14 @@ func main() {
         secret_file_bits_hamming=append(secret_file_bits_hamming, hamming_block...);
     }
 
-    fmt.Printf("\nTotal size: %d",len(secret_file_bits_hamming)+64+16*3)
+    fmt.Printf("\nTotal size of payload (in bits): %d",len(secret_file_bits_hamming)+64+16*3);
 
     //count how many bits we are going to encode in the video
-    number_of_bits := make([]byte, 8)
-    binary.BigEndian.PutUint64(number_of_bits, uint64(len(secret_file_bits_hamming)+64+16*3))//64 bits for size header + 16*3 bits for size header hamming
+    number_of_bits := make([]byte, 8);
+    binary.BigEndian.PutUint64(number_of_bits, uint64(len(secret_file_bits_hamming)+64+16*3));//64 bits for size header + 16*3 bits for size header hamming
 
     //add hamming to size header
-    number_of_bits=get_bits(number_of_bits)
+    number_of_bits=get_bits(number_of_bits);
 
     for i:=0; i<len(number_of_bits); i+=4{
         hamming_block=hamming_encode(number_of_bits[i:i+4]);
@@ -204,8 +204,8 @@ func main() {
     }
 
     //append size and secret
-    payload_bits=append(payload_bits, number_of_bits_hamming...)
-    payload_bits=append(payload_bits, secret_file_bits_hamming...)
+    payload_bits=append(payload_bits, number_of_bits_hamming...);
+    payload_bits=append(payload_bits, secret_file_bits_hamming...);
 
 
 
@@ -218,16 +218,16 @@ func main() {
 
             if secret_count+secret_bits_per_frame<len(payload_bits){//check if we are in the end of the file
 
-                bit_array=payload_bits[secret_count:secret_count+secret_bits_per_frame]//read the data to hide
+                bit_array=payload_bits[secret_count:secret_count+secret_bits_per_frame];//read the data to hide
 
             }else{
-                bit_array=payload_bits[secret_count:]//maybe this does not work
-                end_of_secret=true
+                bit_array=payload_bits[secret_count:];//maybe this does not work
+                end_of_secret=true;
             }
 
-            level_1(frame_data, bit_array, y_size, width, output_path)
+            level_1(frame_data, bit_array, y_size, width, output_path);
 
-            secret_count=secret_count+secret_bits_per_frame
+            secret_count=secret_count+secret_bits_per_frame;
 
         }else{
             frame_data, end_of_video=read_frame(video_path, int64(frame_count)*int64(frame_size), 0, frame_size);//read new frame
@@ -243,6 +243,6 @@ func main() {
                 output_file.Close();
             }
         }
-        frame_count=frame_count+1
+        frame_count=frame_count+1;
     }
 }
