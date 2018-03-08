@@ -111,7 +111,7 @@ func hamming_decode (input_array []byte) []byte {
     return output
 }
 
-func extract_bits(number_of_bits_to_read uint64, encoded_path string, frame_size int, y_size int, width int) []byte{//reads frames and extracts secret bits until the number is reached
+func extract_bits(number_of_bits_to_read uint64, encoded_path string, frame_size int, start_position int, secret_bits_per_frame int, width int) []byte{//reads frames and extracts secret bits until the number is reached
 
     var frame_data []byte;
     var output_data []byte;
@@ -133,11 +133,11 @@ func extract_bits(number_of_bits_to_read uint64, encoded_path string, frame_size
     for extracted_bits!=number_of_bits_to_read{
 
         end_of_frame=false;
-        frame_position= y_size;
-        frame_data, _=read_frame(encoded_path, int64(frame_count)*int64(frame_size), frame_size);//load frame
-        
+        frame_position= start_position;
 
-        for end_of_frame!=true{
+        frame_data, _=read_frame(encoded_path, int64(frame_count)*int64(frame_size), frame_size);//load frame
+
+        for end_of_frame!=true || frame_position+in_line_position<secret_bits_per_frame{
 
             for line_position:=0; line_position<width; line_position+=width/4{
                 for line_block:=0; line_block<4; line_block++{
@@ -191,7 +191,7 @@ func extract_bits(number_of_bits_to_read uint64, encoded_path string, frame_size
     return output_data_decoded
 }
 
-func get_secret_size(encoded_path string, frame_size int, y_size int, width int) uint64{
+func get_secret_size(encoded_path string, frame_size int, start_position int, secret_bits_per_frame int, width int) uint64{
 
     var secret_size uint64;
     var secret_size_in_bits []byte;
@@ -200,7 +200,7 @@ func get_secret_size(encoded_path string, frame_size int, y_size int, width int)
 
     var secret_size_in_bytes  []byte;
 
-    secret_size_in_bits = extract_bits(64+16*3, encoded_path, frame_size, y_size, width);//64+16*3 for the hamming bits of size header
+    secret_size_in_bits = extract_bits(64+16*3, encoded_path, frame_size, start_position, secret_bits_per_frame, width);//64+16*3 for the hamming bits of size header
 
     //reverse each bit inside each byte
     for b:=0; b<8; b++{
@@ -239,6 +239,7 @@ func main() {
     output_path_ptr := flag.String("o", "decoded.file", "Path for output file");
     width_ptr := flag.Int("w", 0, "Video width");
     high_ptr := flag.Int("h", 0, "Video high");
+    yuv_option_ptr := flag.Int("yuv", 3, "Use Luminance Y (0), blue chroma Cb (1), red chroma Cr (2), both chromas (3) or all YCbCr (4)")
     flag.Parse();
 
     if *encoded_file_path_ptr=="" || *width_ptr==0 || *high_ptr==0 {
@@ -251,21 +252,27 @@ func main() {
     var decoded_path string = *output_path_ptr;
     var width int = *width_ptr;
     var high int = *high_ptr;
+    var yuv_option int = *yuv_option_ptr;
     var y_size int = width*high; 
     var u_size int = width*high*2/8; //in yuv420 u_size = y_size*2/8 bytes
     var v_size int = u_size;
     var frame_size int = y_size + u_size + v_size;
+
+    yuv_options_size_array := []int{y_size/16, u_size/16, v_size/16, 2*u_size/16, frame_size/16}//indicates how many bits we are embeded in each frame depending on yuv_option ex-> for yuv_option 3: u_size*2/16=28800
+    yuv_options_start_position_array := []int{0, u_size, v_size, y_size, 0}//indicates start position for reading (recover secret) in frame, dependending on yuv options
+    var secret_bits_per_frame int = yuv_options_size_array[yuv_option];
+    var start_position int = yuv_options_start_position_array[yuv_option];
     //
 
     var secret_in_bits []byte;
     var secret_bit_array [8]byte;
     var secret_in_bytes []byte;
 
-    var secret_size uint64=get_secret_size(encoded_path, frame_size, y_size, width);
+    var secret_size uint64=get_secret_size(encoded_path, frame_size, start_position, secret_bits_per_frame, width);
 
     //read the secret
     fmt.Println("\n\nReading...");
-    secret_in_bits=extract_bits(secret_size, encoded_path, frame_size, y_size, width);
+    secret_in_bits=extract_bits(secret_size, encoded_path, frame_size, start_position, secret_bits_per_frame, width);
     fmt.Printf("\n%d bits recovered", len(secret_in_bits));
 
     for i:=64; i<len(secret_in_bits); i+=8{//turn bits to bytes(skip the first 64 bits which are used for secret size)
