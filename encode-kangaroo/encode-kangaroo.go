@@ -8,6 +8,48 @@ import (
     "flag"
 )
 
+func get_parameters()(string, string, string, int, int, int, int, int){
+    secret_file_path_ptr := flag.String("i", "", "Absolute path to the file we want to hide");
+    video_path_ptr := flag.String("v", "", "Absolute path to the raw video (in yuv 420 format) that will contain the secret file");
+    output_path_ptr := flag.String("o", "encoded.yuv420", "Path and name for output file");
+    width_ptr := flag.Int("w", 0, "Video width");
+    high_ptr := flag.Int("h", 0, "Video high");
+    yuv_option_ptr := flag.Int("yuv", 3, "Use Luma Y (0), blue chroma Cb (1), red chroma Cr (2), both chromas (3) or all YCbCr (4)")
+    frame_percentage_ptr := flag.Int("frame", 100, "Use 10, 25, 50 or 100 percent of all frames")
+    bits_to_use_ptr := flag.Int("b", 4, "How many bits to use in each byte")
+    flag.Parse();
+
+    if *secret_file_path_ptr=="" || *video_path_ptr=="" || *width_ptr==0 || *high_ptr==0 {
+        flag.PrintDefaults();
+        os.Exit(1);
+    }
+
+    var secret_file_path string = *secret_file_path_ptr;
+    var video_path string = *video_path_ptr;
+    var output_path string = *output_path_ptr;
+    var width int = *width_ptr;
+    var high int = *high_ptr;
+    var yuv_option int = *yuv_option_ptr;
+    var frame_percentage int = *frame_percentage_ptr;
+    var bits_to_use int = *bits_to_use_ptr;
+    var frame_increase int;
+
+    if frame_percentage==10{
+        frame_increase=10;
+    }else if frame_percentage==25{
+        frame_increase=4;
+    }else if frame_percentage==50{
+        frame_increase=2;
+    }else if frame_percentage==100{
+        frame_increase=1;
+    }else{
+        fmt.Println("You have entered a not allowed percentage of frames.")
+        os.Exit(1);
+    }
+
+    return secret_file_path, video_path, output_path, width, high, yuv_option, frame_increase, bits_to_use
+}
+
 func check(err error) {
     if err != nil {
         fmt.Println(err);
@@ -66,6 +108,11 @@ func read_frame(file_path string, offset int64, clear_option byte, frame_size in
 
     last_position, err = binary_file.Seek(0,2)
     check(err)
+
+    if offset>last_position{
+        end_of_file=true
+        return read_bytes, end_of_file
+    }
 
     new_position, err = binary_file.Seek(offset, 0)
     check(err)
@@ -134,28 +181,11 @@ func embed(frame_data []byte, secret_file_bits []byte, start_position int, width
 
 func main() {
 
-    secret_file_path_ptr := flag.String("i", "", "Absolute path to the file we want to hide.");
-    video_path_ptr := flag.String("v", "", "Absolute path to the raw video that will contain the secret file.");
-    output_path_ptr := flag.String("o", "encoded.yuv420", "Path and name for output file");
-    width_ptr := flag.Int("w", 0, "Video width");
-    high_ptr := flag.Int("h", 0, "Video high");
-    yuv_option_ptr := flag.Int("yuv", 3, "Use Luminance Y (0), blue chroma Cb (1), red chroma Cr (2), both chromas (3) or all YCbCr (4)")
-    //bits_to_use_ptr := flag.Int("b", 4, "How many bits to use in each byte")
-    flag.Parse();
+    var(
+        secret_file_path, video_path, output_path, width, high, yuv_option, frame_increase, bits_to_use = get_parameters();
+        )
 
-    if *secret_file_path_ptr=="" || *video_path_ptr=="" || *width_ptr==0 || *high_ptr==0 {
-        flag.PrintDefaults();
-        os.Exit(1);
-    }
-
-    var secret_file_path string = *secret_file_path_ptr;
-    var video_path string = *video_path_ptr;
-    var output_path string = *output_path_ptr;
-    var width int = *width_ptr;
-    var high int = *high_ptr;
-    var yuv_option int = *yuv_option_ptr;
-    //var bits_to_use int = *bits_to_use_ptr;
-
+    fmt.Printf("\n Using %d bits of each byte.", bits_to_use)
     var y_size int = width*high; 
     var u_size int = width*high*2/8; //in yuv420 u_size = y_size*2/8 bytes
     var v_size int = u_size;
@@ -216,12 +246,9 @@ func main() {
     payload_bits=append(payload_bits, number_of_bits_hamming...);
     payload_bits=append(payload_bits, secret_file_bits_hamming...);
 
-
-
-
     for end_of_video!=true{
 
-        if end_of_secret!=true{//define frame data and secret data, and give it to embed() frame by frame
+        if end_of_secret!=true && frame_count%frame_increase==0{//define frame data and secret data, and give it to embed() frame by frame
 
             frame_data, end_of_video=read_frame(video_path, int64(frame_count)*int64(frame_size), 1, frame_size);//read new frame
 
