@@ -15,14 +15,40 @@ func get_parameters()(string, string, int, int, int, int, int){
     width_ptr := flag.Int("w", 0, "Video width");
     high_ptr := flag.Int("h", 0, "Video high");
     yuv_option_ptr := flag.Int("yuv", 3, "Use Luma Y (0), blue chroma Cb (1), red chroma Cr (2), both chromas (3) or all YCbCr (4)")
-    frame_percentage_ptr := flag.Int("frame", 100, "Use 10, 25, 50 or 100 percent of all frames")
-    bits_to_use_ptr := flag.Int("b", 4, "How many bits to use in each byte")
+    frame_percentage_ptr := flag.Int("frame", 100, "Percentage of frames to use:10, 25, 50 or 100")
+    bits_to_use_ptr := flag.Int("bits", 4, "How many bits to use in each byte: 1-8")
     flag.Parse();
 
-    if *encoded_file_path_ptr=="" || *width_ptr==0 || *high_ptr==0 {
+    if *encoded_file_path_ptr==""{
+        fmt.Println("Please, enter a valid path for encoded file\n")
         flag.PrintDefaults();
         os.Exit(1);
     }
+
+    if *width_ptr==0{
+        fmt.Println("Please, enter a valid width value\n")
+        flag.PrintDefaults();
+        os.Exit(1);
+    }
+
+    if *high_ptr==0{
+        fmt.Println("Please, enter a valid high value\n")
+        flag.PrintDefaults();
+        os.Exit(1);
+    }
+
+    if *yuv_option_ptr<0 || *yuv_option_ptr>4 {
+        fmt.Println("Please, enter a valid value for yuv parameter\n")
+        flag.PrintDefaults();
+        os.Exit(1);
+    }
+
+    if *bits_to_use_ptr<1 || *bits_to_use_ptr>8{
+        fmt.Println("Please, enter a valid value for bits parameter\n")
+        flag.PrintDefaults();
+        os.Exit(1);
+    }
+
 
     //constants of this video
     var encoded_path string = *encoded_file_path_ptr;
@@ -43,7 +69,8 @@ func get_parameters()(string, string, int, int, int, int, int){
     }else if frame_percentage==100{
         frame_increase=1;
     }else{
-        fmt.Println("You have entered a not allowed percentage of frames.");
+        fmt.Println("Please, enter a valid value for frame percentage parameter\n");
+        flag.PrintDefaults();
         os.Exit(1);
     }
 
@@ -157,7 +184,7 @@ func hamming_decode (input_array []byte) []byte {
     return output
 }
 
-func extract_bits(number_of_bits_to_read uint64, encoded_path string, frame_size int, start_position int, secret_bits_per_frame int, width int, frame_increase int) []byte{//reads frames and extracts secret bits until the number is reached
+func extract_bits(number_of_bits_to_read uint64, encoded_path string, frame_size int, start_position int, secret_bits_per_frame int, width int, frame_increase int, bits_to_use int, zero_value byte, one_value byte) []byte{//reads frames and extracts secret bits until the number is reached
 
     var frame_data []byte;
     var output_data []byte;
@@ -174,8 +201,8 @@ func extract_bits(number_of_bits_to_read uint64, encoded_path string, frame_size
     var extracted_bits uint64 = 0;
     var extracted_bits_in_frame int = 0;
 
-    var try_23 float64;
-    var try_8 float64;
+    var try_1 float64;
+    var try_0 float64;
 
     for extracted_bits!=number_of_bits_to_read{
 
@@ -194,11 +221,11 @@ func extract_bits(number_of_bits_to_read uint64, encoded_path string, frame_size
 
                         actual_byte=frame_data[frame_position+line_block+line_position+in_line_position]
                         
-                        clear_bit(&actual_byte, 6);
-                        clear_bit(&actual_byte, 7);
-                        clear_bit(&actual_byte, 8);
+                        for a:=0; a<(8-bits_to_use) ;a++{
+                            clear_bit(&actual_byte, 8-a);
+                        }
 
-                        sum=sum+int(actual_byte);
+                        sum=sum+int(actual_byte);//calculate the mean value of the 4x4 block
                     }
                 }
                 in_line_position=in_line_position+4;
@@ -212,10 +239,10 @@ func extract_bits(number_of_bits_to_read uint64, encoded_path string, frame_size
                 mean=float64(sum)/16;
                 sum=0;
 
-                try_23 = math.Abs(float64(mean)-float64(23));//calculate if encoded bit is 1 or 0
-                try_8 = math.Abs(float64(mean)-float64(8));
+                try_1 = math.Abs(float64(mean)-float64(one_value));//calculate if encoded bit is 1 or 0
+                try_0 = math.Abs(float64(mean)-float64(zero_value));
 
-                if try_23 < try_8 {
+                if try_1 < try_0 {
                     output_data=append(output_data, 1);
                     
                 }else{
@@ -248,7 +275,7 @@ func extract_bits(number_of_bits_to_read uint64, encoded_path string, frame_size
     return output_data_decoded
 }
 
-func get_secret_size(encoded_path string, frame_size int, start_position int, secret_bits_per_frame int, width int, frame_increase int) uint64{
+func get_secret_size(encoded_path string, frame_size int, start_position int, secret_bits_per_frame int, width int, frame_increase int, bits_to_use int, zero_value byte, one_value byte) uint64{
 
     var secret_size uint64;
     var secret_size_in_bits []byte;
@@ -257,7 +284,7 @@ func get_secret_size(encoded_path string, frame_size int, start_position int, se
 
     var secret_size_in_bytes  []byte;
 
-    secret_size_in_bits = extract_bits(64+16*3, encoded_path, frame_size, start_position, secret_bits_per_frame, width, frame_increase);//64+16*3 for the hamming bits of size header
+    secret_size_in_bits = extract_bits(64+16*3, encoded_path, frame_size, start_position, secret_bits_per_frame, width, frame_increase, bits_to_use, zero_value, one_value);//64+16*3 for the hamming bits of size header
 
     //reverse each bit inside each byte
     for b:=0; b<8; b++{
@@ -296,11 +323,16 @@ func main() {
         encoded_path, decoded_path, width, high, yuv_option, frame_increase, bits_to_use = get_parameters()
         )
 
-    fmt.Printf("\nUsing %d bits of each byte.", bits_to_use)
     var y_size int = width*high; 
     var u_size int = width*high*2/8; //in yuv420 u_size = y_size*2/8 bytes
     var v_size int = u_size;
     var frame_size int = y_size + u_size + v_size;
+
+    //get one_value and zero_value
+    zero_values := []byte{0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40}//0, 1, 2, 4, 8, 16 , 32, 64
+    one_values := []byte{0x01, 0x02, 0x05, 0x0b, 0x17, 0x2f, 0x5f, 0xbf}//1, 2, 5, 11, 23, 47, 95, 191
+    var zero_value byte = zero_values[bits_to_use-1];
+    var one_value byte = one_values[bits_to_use-1];
 
     yuv_options_size_array := []int{y_size/16, u_size/16, v_size/16, 2*u_size/16, frame_size/16}//indicates how many bits we are embeded in each frame depending on yuv_option ex-> for yuv_option 3: u_size*2/16=28800
     yuv_options_start_position_array := []int{0, y_size, y_size+u_size, y_size, 0}//indicates start position for reading (recover secret) in frame, dependending on yuv options
@@ -312,11 +344,11 @@ func main() {
     var secret_bit_array [8]byte;
     var secret_in_bytes []byte;
 
-    var secret_size uint64=get_secret_size(encoded_path, frame_size, start_position, secret_bits_per_frame, width, frame_increase);
+    var secret_size uint64=get_secret_size(encoded_path, frame_size, start_position, secret_bits_per_frame, width, frame_increase, bits_to_use, zero_value, one_value);
 
     //read the secret
     fmt.Println("\n\nReading...");
-    secret_in_bits=extract_bits(secret_size, encoded_path, frame_size, start_position, secret_bits_per_frame, width, frame_increase);
+    secret_in_bits=extract_bits(secret_size, encoded_path, frame_size, start_position, secret_bits_per_frame, width, frame_increase, bits_to_use, zero_value, one_value);
     fmt.Printf("\n%d bits recovered", len(secret_in_bits));
 
     for i:=64; i<len(secret_in_bits); i+=8{//turn bits to bytes(skip the first 64 bits which are used for secret size)

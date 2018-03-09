@@ -15,11 +15,42 @@ func get_parameters()(string, string, string, int, int, int, int, int){
     width_ptr := flag.Int("w", 0, "Video width");
     high_ptr := flag.Int("h", 0, "Video high");
     yuv_option_ptr := flag.Int("yuv", 3, "Use Luma Y (0), blue chroma Cb (1), red chroma Cr (2), both chromas (3) or all YCbCr (4)")
-    frame_percentage_ptr := flag.Int("frame", 100, "Use 10, 25, 50 or 100 percent of all frames")
-    bits_to_use_ptr := flag.Int("b", 4, "How many bits to use in each byte")
+    frame_percentage_ptr := flag.Int("frame", 100, "Percentage of frames to use:10, 25, 50 or 100")
+    bits_to_use_ptr := flag.Int("bits", 4, "How many bits to use in each byte: 1-8")
     flag.Parse();
 
-    if *secret_file_path_ptr=="" || *video_path_ptr=="" || *width_ptr==0 || *high_ptr==0 {
+    if *secret_file_path_ptr==""{
+        fmt.Println("Please, enter a file to secret path\n")
+        flag.PrintDefaults();
+        os.Exit(1);
+    }
+
+    if *video_path_ptr==""{
+        fmt.Println("Please, enter a file to video path\n")
+        flag.PrintDefaults();
+        os.Exit(1);
+    }
+
+    if *width_ptr==0{
+        fmt.Println("Please, enter a valid width value\n")
+        flag.PrintDefaults();
+        os.Exit(1);
+    }
+
+    if *high_ptr==0{
+        fmt.Println("Please, enter a valid high value\n")
+        flag.PrintDefaults();
+        os.Exit(1);
+    }
+
+    if *yuv_option_ptr<0 || *yuv_option_ptr>4 {
+        fmt.Println("Please, enter a valid value for yuv parameter\n")
+        flag.PrintDefaults();
+        os.Exit(1);
+    }
+
+    if *bits_to_use_ptr<1 || *bits_to_use_ptr>8{
+        fmt.Println("Please, enter a valid value for bits parameter\n")
         flag.PrintDefaults();
         os.Exit(1);
     }
@@ -43,7 +74,8 @@ func get_parameters()(string, string, string, int, int, int, int, int){
     }else if frame_percentage==100{
         frame_increase=1;
     }else{
-        fmt.Println("You have entered a not allowed percentage of frames.")
+        fmt.Println("Please, enter a valid value for frame percentage parameter\n")
+        flag.PrintDefaults();
         os.Exit(1);
     }
 
@@ -94,7 +126,7 @@ func hamming_encode (input_array []byte) []byte {
     return output
 }
 
-func read_frame(file_path string, offset int64, clear_option byte, frame_size int) ([]byte, bool) {
+func read_frame(file_path string, offset int64, clear_option byte, frame_size int, bits_to_use int) ([]byte, bool) {
 
     var new_position int64;
     var last_position int64;
@@ -127,11 +159,9 @@ func read_frame(file_path string, offset int64, clear_option byte, frame_size in
 
     if clear_option==1{
         for i:=0; i<len(read_bytes); i++{
-            clear_bit(&read_bytes[i], 1)
-            clear_bit(&read_bytes[i], 2)
-            clear_bit(&read_bytes[i], 3)
-            clear_bit(&read_bytes[i], 4)
-            clear_bit(&read_bytes[i], 5)
+            for b:=0; b<bits_to_use; b++{
+                clear_bit(&read_bytes[i], b+1)
+            }
         }
     }
 
@@ -139,7 +169,7 @@ func read_frame(file_path string, offset int64, clear_option byte, frame_size in
     return read_bytes, end_of_file
 }
 
-func embed(frame_data []byte, secret_file_bits []byte, start_position int, width int, output_path string){//changes the LSB of every U and V
+func embed(frame_data []byte, secret_file_bits []byte, start_position int, width int, output_path string, one_value byte, zero_value byte){//changes the LSB of every U and V
 
     var frame_position int = start_position;//start at Y, U or V
     var in_line_position int = 0;
@@ -154,7 +184,7 @@ func embed(frame_data []byte, secret_file_bits []byte, start_position int, width
 
             for line_position:=0; line_position<width; line_position+=width/4{
                 for line_block:=0; line_block<4; line_block++{
-                    frame_data[frame_position+line_block+line_position+in_line_position]=frame_data[frame_position+line_block+line_position+in_line_position]+0x08;
+                    frame_data[frame_position+line_block+line_position+in_line_position]=frame_data[frame_position+line_block+line_position+in_line_position]+zero_value;
                 }
             }
         }
@@ -163,7 +193,7 @@ func embed(frame_data []byte, secret_file_bits []byte, start_position int, width
 
             for line_position:=0; line_position<width; line_position+=width/4{
                 for line_block:=0; line_block<4; line_block++{
-                    frame_data[frame_position+line_block+line_position+in_line_position]=frame_data[frame_position+line_block+line_position+in_line_position]+0x17;
+                    frame_data[frame_position+line_block+line_position+in_line_position]=frame_data[frame_position+line_block+line_position+in_line_position]+one_value;
                 }
             }
         }
@@ -185,15 +215,21 @@ func main() {
         secret_file_path, video_path, output_path, width, high, yuv_option, frame_increase, bits_to_use = get_parameters();
         )
 
-    fmt.Printf("\n Using %d bits of each byte.", bits_to_use)
     var y_size int = width*high; 
     var u_size int = width*high*2/8; //in yuv420 u_size = y_size*2/8 bytes
     var v_size int = u_size;
     var frame_size int = y_size + u_size + v_size;
 
+    //get one_value and zero_value
+    zero_values := []byte{0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40}//0, 1, 2, 4, 8, 16 , 32, 64
+    one_values := []byte{0x01, 0x02, 0x05, 0x0b, 0x17, 0x2f, 0x5f, 0xbf}//1, 2, 5, 11, 23, 47, 95, 191
+    var zero_value byte = zero_values[bits_to_use-1];
+    var one_value byte = one_values[bits_to_use-1];
+
     //every secret bit is encoded in a 4*4 byte bloc (16 bytes)
     yuv_options_size_array := []int{y_size/16, u_size/16, v_size/16, 2*u_size/16, frame_size/16}//indicates how many bits we can embed in each frame depending on yuv_option ex-> for yuv_option 3: u_size*2/16=28800
     yuv_options_start_position_array := []int{0, y_size, y_size+u_size, y_size, 0}//indicates start position for writing (embeding secret) in frame, dependending on yuv options
+    
     var secret_bits_per_frame int = yuv_options_size_array[yuv_option];
     var start_position int = yuv_options_start_position_array[yuv_option];
 
@@ -248,9 +284,9 @@ func main() {
 
     for end_of_video!=true{
 
-        if end_of_secret!=true && frame_count%frame_increase==0{//define frame data and secret data, and give it to embed() frame by frame
+        if end_of_secret!=true && frame_count%frame_increase==0{//check frame_percentage parameter and define frame data and secret data, and give it to embed() frame by frame
 
-            frame_data, end_of_video=read_frame(video_path, int64(frame_count)*int64(frame_size), 1, frame_size);//read new frame
+            frame_data, end_of_video=read_frame(video_path, int64(frame_count)*int64(frame_size), 1, frame_size, bits_to_use);//read new frame
 
             if secret_count+secret_bits_per_frame<len(payload_bits){//check if we are in the end of the file
 
@@ -261,12 +297,12 @@ func main() {
                 end_of_secret=true;
             }
 
-            embed(frame_data, bit_array, start_position, width, output_path);
+            embed(frame_data, bit_array, start_position, width, output_path, one_value, zero_value);
 
             secret_count=secret_count+secret_bits_per_frame;
 
         }else{
-            frame_data, end_of_video=read_frame(video_path, int64(frame_count)*int64(frame_size), 0, frame_size);//read new frame
+            frame_data, end_of_video=read_frame(video_path, int64(frame_count)*int64(frame_size), 0, frame_size, bits_to_use);//read new frame
 
             if end_of_video!=true{
                 output_file, err := os.OpenFile(output_path, os.O_APPEND|os.O_WRONLY, 0600);
