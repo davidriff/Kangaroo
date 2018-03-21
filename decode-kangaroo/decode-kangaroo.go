@@ -171,7 +171,7 @@ func decode_ldpc(encoded_bits []byte) []byte{
     err := ioutil.WriteFile("files/encoded_bits_in_ascii", encoded_bits_in_ascii, 0644);
     check(err);
 
-    runcmd("decode files/ldpc.pchk files/encoded_bits_in_ascii files/decoded-file.out bsc 0.4 enum-block files/ldpc.gen")
+    runcmd("decode files/ldpc.pchk files/encoded_bits_in_ascii files/decoded-file.out bsc 0.45 enum-block files/ldpc.gen")
     runcmd("extract files/ldpc.gen  files/decoded-file.out  files/extracted-file")
 
     decoded_file_ascii, err = ioutil.ReadFile("files/extracted-file");
@@ -285,7 +285,7 @@ func get_secret_size(encoded_path string, frame_size int, start_position int, se
 
     var secret_size_in_bytes  []byte;
 
-    secret_size_in_bits = extract_bits(64*100, encoded_path, frame_size, start_position, secret_bits_per_frame, width, frame_increase, bits_to_use, zero_value, one_value);//64+16*3 for the hamming bits of size header
+    secret_size_in_bits = extract_bits(64*10, encoded_path, frame_size, start_position, secret_bits_per_frame, width, frame_increase, bits_to_use, zero_value, one_value);//64+16*3 for the hamming bits of size header
 
     //reverse each bit inside each byte
     for b:=0; b<8; b++{

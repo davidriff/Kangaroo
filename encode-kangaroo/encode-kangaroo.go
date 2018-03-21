@@ -279,7 +279,7 @@ func main() {
     check(err);
 
     //encode file with ldpc
-    runcmd("make-ldpc files/ldpc.pchk 99 100 1 evenboth 3");//build parity check matrix
+    runcmd("make-ldpc files/ldpc.pchk 9 10 1 evenboth 3");//build parity check matrix
     runcmd("make-gen files/ldpc.pchk files/ldpc.gen dense");//build generator matrix
     
     secret_file, err := ioutil.ReadFile(secret_file_path);//read secret file
@@ -287,11 +287,11 @@ func main() {
 
     secret_file_bits_ldpc = encode_ldpc(secret_file_in_bits);
 
-    fmt.Printf("\nTotal size of payload (in bits): %d\n",len(secret_file_bits_ldpc)+64*100);
+    fmt.Printf("\nTotal size of payload (in bits): %d\n",len(secret_file_bits_ldpc)+64*10);
 
     //count how many bits we are going to encode in the video
     number_of_bits := make([]byte, 8);
-    binary.BigEndian.PutUint64(number_of_bits, uint64(len(secret_file_bits_ldpc)+64*100));//64 bits for size header * 100 because of ldpc encode
+    binary.BigEndian.PutUint64(number_of_bits, uint64(len(secret_file_bits_ldpc)+64*10));//64 bits for size header * 100 because of ldpc encode
 
     number_of_bits=get_bits(number_of_bits);
 
