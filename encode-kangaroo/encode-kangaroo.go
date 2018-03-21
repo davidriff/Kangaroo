@@ -4,6 +4,7 @@ import (
     "fmt"
     "io/ioutil"
     "os"
+    "os/exec"
     "encoding/binary"
     "flag"
 )
@@ -31,13 +32,13 @@ func get_parameters()(string, string, string, int, int, int, int, int){
         os.Exit(1);
     }
 
-    if *width_ptr==0{
+    if *width_ptr<=0{
         fmt.Println("Please, enter a valid width value\n")
         flag.PrintDefaults();
         os.Exit(1);
     }
 
-    if *high_ptr==0{
+    if *high_ptr<=0{
         fmt.Println("Please, enter a valid high value\n")
         flag.PrintDefaults();
         os.Exit(1);
@@ -89,6 +90,15 @@ func check(err error) {
     }
 }
 
+func runcmd(cmd string) []byte {
+
+    out, err := exec.Command("bash", "-c", cmd).Output()
+    if err != nil {
+        fmt.Println("\nERROR executing command: "+cmd)
+    }
+    return out
+}
+
 func get_bits(bytes_in []byte) []byte { //returns the bits in a byte
 
     var bit_slice []byte;
@@ -109,21 +119,39 @@ func clear_bit(byte_in *byte, position int) { //sets to 0 the specified bit, cal
     *byte_in = out
 }
 
-func hamming_encode (input_array []byte) []byte {
+func encode_ldpc(file_in_bits []byte) []byte{
 
-    var output []byte;
-    var result byte;
+    var encoded_file_bits []byte;
+    var file_bits_in_ascii []byte;
 
-    G := [][]byte{{1,1,1,0,0,0,0}, {1,0,0,1,1,0,0}, {0,1,0,1,0,1,0}, {1,1,0,1,0,0,1}};
+    for i:=0; i<len(file_in_bits); i++{
 
-    for i:=0; i<7; i++{
-        result=0;
-        for j:=0; j<4; j++{
-            result=result^input_array[j]&G[j][i];
+        if file_in_bits[i] == 0{
+            file_bits_in_ascii=append(file_bits_in_ascii, 48);
+
+        }else if file_in_bits[i]==1{
+            file_bits_in_ascii=append(file_bits_in_ascii, 49);
         }
-        output=append(output, result);
     }
-    return output
+
+    err := ioutil.WriteFile("files/file_bits_in_ascii", file_bits_in_ascii, 0644);
+    check(err);
+
+    runcmd("encode files/ldpc.pchk files/ldpc.gen files/file_bits_in_ascii files/encoded")
+
+    encoded_file_ascii, err := ioutil.ReadFile("files/encoded");
+
+    for i:=0; i<len(encoded_file_ascii); i++{
+
+        if encoded_file_ascii[i]==48{
+            encoded_file_bits=append(encoded_file_bits,0)
+
+        }else if encoded_file_ascii[i]==49{
+            encoded_file_bits=append(encoded_file_bits,1)
+        }
+    }
+
+    return encoded_file_bits
 }
 
 func read_frame(file_path string, offset int64, clear_option byte, frame_size int, bits_to_use int) ([]byte, bool) {
@@ -220,7 +248,7 @@ func main() {
     var v_size int = u_size;
     var frame_size int = y_size + u_size + v_size;
 
-    //get one_value and zero_value
+    //get one_value and zero_value depending on bits_to_use user parameter
     zero_values := []byte{0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40}//0, 1, 2, 4, 8, 16 , 32, 64
     one_values := []byte{0x01, 0x02, 0x05, 0x0b, 0x17, 0x2f, 0x5f, 0xbf}//1, 2, 5, 11, 23, 47, 95, 191
     var zero_value byte = zero_values[bits_to_use-1];
@@ -235,10 +263,8 @@ func main() {
 
     var frame_data [] byte;
 
-    var secret_file_bits []byte;
-    var secret_file_bits_hamming []byte;
-    var number_of_bits_hamming [] byte;
-    var hamming_block []byte;
+    var secret_file_bits_ldpc []byte;
+    var number_of_bits_ldpc []byte;
     var payload_bits []byte;
     var bit_array []byte;
 
@@ -252,35 +278,29 @@ func main() {
     err := ioutil.WriteFile(output_path, empty, 0644);
     check(err);
 
-    secret_file, err := ioutil.ReadFile(secret_file_path);
-    check(err);
+    //encode file with ldpc
+    runcmd("make-ldpc files/ldpc.pchk 99 100 1 evenboth 3");//build parity check matrix
+    runcmd("make-gen files/ldpc.pchk files/ldpc.gen dense");//build generator matrix
+    
+    secret_file, err := ioutil.ReadFile(secret_file_path);//read secret file
+    secret_file_in_bits := get_bits(secret_file);//convert secret file into bits
 
-    secret_file_bits=get_bits(secret_file);
+    secret_file_bits_ldpc = encode_ldpc(secret_file_in_bits);
 
-
-    //add hamming to secret bits
-    for i:=0; i<len(secret_file_bits); i+=4{
-        hamming_block=hamming_encode(secret_file_bits[i:i+4]);
-        secret_file_bits_hamming=append(secret_file_bits_hamming, hamming_block...);
-    }
-
-    fmt.Printf("\nTotal size of payload (in bits): %d",len(secret_file_bits_hamming)+64+16*3);
+    fmt.Printf("\nTotal size of payload (in bits): %d\n",len(secret_file_bits_ldpc)+64*100);
 
     //count how many bits we are going to encode in the video
     number_of_bits := make([]byte, 8);
-    binary.BigEndian.PutUint64(number_of_bits, uint64(len(secret_file_bits_hamming)+64+16*3));//64 bits for size header + 16*3 bits for size header hamming
+    binary.BigEndian.PutUint64(number_of_bits, uint64(len(secret_file_bits_ldpc)+64*100));//64 bits for size header * 100 because of ldpc encode
 
-    //add hamming to size header
     number_of_bits=get_bits(number_of_bits);
 
-    for i:=0; i<len(number_of_bits); i+=4{
-        hamming_block=hamming_encode(number_of_bits[i:i+4]);
-        number_of_bits_hamming=append(number_of_bits_hamming, hamming_block...);//+3 or +4?
-    }
+    //encode message size
+    number_of_bits_ldpc=encode_ldpc(number_of_bits);
 
     //append size and secret
-    payload_bits=append(payload_bits, number_of_bits_hamming...);
-    payload_bits=append(payload_bits, secret_file_bits_hamming...);
+    payload_bits=append(payload_bits, number_of_bits_ldpc...);
+    payload_bits=append(payload_bits, secret_file_bits_ldpc...);
 
     for end_of_video!=true{
 

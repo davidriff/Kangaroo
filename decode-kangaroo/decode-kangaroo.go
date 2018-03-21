@@ -3,6 +3,7 @@ package main
 import (
     "fmt"
     "os"
+    "os/exec"
     "math"
     "encoding/binary"
     "io/ioutil"
@@ -143,52 +144,55 @@ func bits_to_byte(bit_array [8]byte, order int) byte{// order specifies if the b
     return byte_out
 }
 
-func hamming_decode (input_array []byte) []byte {
+func runcmd(cmd string) []byte {
 
-    var syndrome [3]byte;
-    var error_position byte;
-    var result byte;
-    var output []byte;
+    out, err := exec.Command("bash", "-c", cmd).Output()
+    if err != nil {
+        fmt.Println("\nERROR executing command: "+cmd)
+    }
+    return out
+}
 
-    H:=[][]byte{{1,0,0}, {0,1,0}, {1,1,0}, {0,0,1}, {1,0,1}, {0,1,1},{1,1,1}}
+func decode_ldpc(encoded_bits []byte) []byte{
 
-    R:=[][]byte{{0,0,0,0}, {0,0,0,0}, {1,0,0,0}, {0,0,0,0}, {0,1,0,0}, {0,0,1,0}, {0,0,0,1}}
+    var encoded_bits_in_ascii []byte;
+    var decoded_file_ascii []byte;
+    var decoded_file_bits []byte;
 
-    for i:=0; i<3; i++{
-        result=0;
-        for j:=0; j<7; j++{
-            result = result^input_array[j]&H[j][i]
+    for i:=0; i<len(encoded_bits); i++{
+
+        if encoded_bits[i] == 0{
+            encoded_bits_in_ascii=append(encoded_bits_in_ascii, 48);
+
+        }else if encoded_bits[i]==1{
+            encoded_bits_in_ascii=append(encoded_bits_in_ascii, 49);
         }
-        syndrome[i]=result
+    }
+    err := ioutil.WriteFile("files/encoded_bits_in_ascii", encoded_bits_in_ascii, 0644);
+    check(err);
+
+    runcmd("decode files/ldpc.pchk files/encoded_bits_in_ascii files/decoded-file.out bsc 0.4 enum-block files/ldpc.gen")
+    runcmd("extract files/ldpc.gen  files/decoded-file.out  files/extracted-file")
+
+    decoded_file_ascii, err = ioutil.ReadFile("files/extracted-file");
+
+    for i:=0; i<len(decoded_file_ascii); i++{
+
+        if decoded_file_ascii[i]==48{
+            decoded_file_bits=append(decoded_file_bits,0)
+
+        }else if decoded_file_ascii[i]==49{
+            decoded_file_bits=append(decoded_file_bits,1)
+        }
     }
 
-    if syndrome[0]!=0 || syndrome[1]!=0 || syndrome[2]!=0{
-
-        error_position = syndrome[0]*byte(1)+syndrome[1]*byte(2)+syndrome[2]*byte(4)
-
-        if input_array[error_position-1]==0{//emulates NOT logical operator for byte type
-            input_array[error_position-1]=1
-        }else{
-            input_array[error_position-1]=0
-        }
-        //fmt.Printf("Error detected at position: %d\n", error_position)
-    }
-
-    for i:=0; i<4; i++{
-        result=0
-        for j:=0;j<7; j++{
-            result=result^input_array[j]&R[j][i]
-        }
-        output=append(output, result)
-    }
-    return output
+    return decoded_file_bits
 }
 
 func extract_bits(number_of_bits_to_read uint64, encoded_path string, frame_size int, start_position int, secret_bits_per_frame int, width int, frame_increase int, bits_to_use int, zero_value byte, one_value byte) []byte{//reads frames and extracts secret bits until the number is reached
 
     var frame_data []byte;
     var output_data []byte;
-    var output_data_decoded []byte;
     var sum int = 0;
     var mean float64;
     var actual_byte byte;
@@ -268,11 +272,8 @@ func extract_bits(number_of_bits_to_read uint64, encoded_path string, frame_size
         frame_count=frame_count+1;
     }
 
-    for i:=0; i<len(output_data); i+=7{
-        output_data_decoded=append(output_data_decoded, hamming_decode(output_data[i:i+7])...)
-    }
-
-    return output_data_decoded
+    //fmt.Println(output_data)
+    return decode_ldpc(output_data)
 }
 
 func get_secret_size(encoded_path string, frame_size int, start_position int, secret_bits_per_frame int, width int, frame_increase int, bits_to_use int, zero_value byte, one_value byte) uint64{
@@ -284,7 +285,7 @@ func get_secret_size(encoded_path string, frame_size int, start_position int, se
 
     var secret_size_in_bytes  []byte;
 
-    secret_size_in_bits = extract_bits(64+16*3, encoded_path, frame_size, start_position, secret_bits_per_frame, width, frame_increase, bits_to_use, zero_value, one_value);//64+16*3 for the hamming bits of size header
+    secret_size_in_bits = extract_bits(64*100, encoded_path, frame_size, start_position, secret_bits_per_frame, width, frame_increase, bits_to_use, zero_value, one_value);//64+16*3 for the hamming bits of size header
 
     //reverse each bit inside each byte
     for b:=0; b<8; b++{
