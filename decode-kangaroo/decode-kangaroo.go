@@ -168,13 +168,13 @@ func decode_ldpc(encoded_bits []byte) []byte{
             encoded_bits_in_ascii=append(encoded_bits_in_ascii, 49);
         }
     }
-    err := ioutil.WriteFile("files/encoded_bits_in_ascii", encoded_bits_in_ascii, 0644);
+    err := ioutil.WriteFile("encoded_bits_in_ascii", encoded_bits_in_ascii, 0644);
     check(err);
 
-    runcmd("decode files/ldpc.pchk files/encoded_bits_in_ascii files/decoded-file.out bsc 0.45 enum-block files/ldpc.gen")
-    runcmd("extract files/ldpc.gen  files/decoded-file.out  files/extracted-file")
+    runcmd("decode ldpc.pchk encoded_bits_in_ascii decoded-file.out bsc 0.45 enum-block ldpc.gen")
+    runcmd("extract ldpc.gen decoded-file.out extracted-file")
 
-    decoded_file_ascii, err = ioutil.ReadFile("files/extracted-file");
+    decoded_file_ascii, err = ioutil.ReadFile("extracted-file");
 
     for i:=0; i<len(decoded_file_ascii); i++{
 
@@ -324,6 +324,9 @@ func main() {
         encoded_path, decoded_path, width, high, yuv_option, frame_increase, bits_to_use = get_parameters()
         )
 
+    runcmd("make-ldpc ldpc.pchk 9 10 1 evenboth 3");//build parity check matrix
+    runcmd("make-gen ldpc.pchk ldpc.gen dense");//build generator matrix
+
     var y_size int = width*high; 
     var u_size int = width*high*2/8; //in yuv420 u_size = y_size*2/8 bytes
     var v_size int = u_size;
@@ -361,5 +364,21 @@ func main() {
 
     }
     err := ioutil.WriteFile(decoded_path, secret_in_bytes, 0644);
+    check(err);
+
+    //remove LPCD files
+    err = os.Remove("ldpc.pchk");
+    check(err);
+
+    err = os.Remove("ldpc.gen");
+    check(err);
+
+    err = os.Remove("encoded_bits_in_ascii");
+    check(err);
+
+    err = os.Remove("decoded-file.out");
+    check(err);
+
+    err = os.Remove("extracted-file");
     check(err);
  }

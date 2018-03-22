@@ -134,12 +134,12 @@ func encode_ldpc(file_in_bits []byte) []byte{
         }
     }
 
-    err := ioutil.WriteFile("files/file_bits_in_ascii", file_bits_in_ascii, 0644);
+    err := ioutil.WriteFile("file_bits_in_ascii", file_bits_in_ascii, 0644);
     check(err);
 
-    runcmd("encode files/ldpc.pchk files/ldpc.gen files/file_bits_in_ascii files/encoded")
+    runcmd("encode ldpc.pchk ldpc.gen file_bits_in_ascii encoded")
 
-    encoded_file_ascii, err := ioutil.ReadFile("files/encoded");
+    encoded_file_ascii, err := ioutil.ReadFile("encoded");
 
     for i:=0; i<len(encoded_file_ascii); i++{
 
@@ -243,6 +243,9 @@ func main() {
         secret_file_path, video_path, output_path, width, high, yuv_option, frame_increase, bits_to_use = get_parameters();
         )
 
+    runcmd("make-ldpc ldpc.pchk 9 10 1 evenboth 3");//build parity check matrix
+    runcmd("make-gen ldpc.pchk ldpc.gen dense");//build generator matrix
+
     var y_size int = width*high; 
     var u_size int = width*high*2/8; //in yuv420 u_size = y_size*2/8 bytes
     var v_size int = u_size;
@@ -277,10 +280,6 @@ func main() {
     empty:=[]byte("");
     err := ioutil.WriteFile(output_path, empty, 0644);
     check(err);
-
-    //encode file with ldpc
-    runcmd("make-ldpc files/ldpc.pchk 9 10 1 evenboth 3");//build parity check matrix
-    runcmd("make-gen files/ldpc.pchk files/ldpc.gen dense");//build generator matrix
     
     secret_file, err := ioutil.ReadFile(secret_file_path);//read secret file
     secret_file_in_bits := get_bits(secret_file);//convert secret file into bits
@@ -337,4 +336,17 @@ func main() {
         }
         frame_count=frame_count+1;
     }
+
+    //remove LPCD files
+    err = os.Remove("ldpc.pchk");
+    check(err);
+
+    err = os.Remove("ldpc.gen");
+    check(err);
+
+    err = os.Remove("file_bits_in_ascii");
+    check(err);
+
+    err = os.Remove("encoded");
+    check(err);
 }
